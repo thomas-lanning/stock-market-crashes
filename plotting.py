@@ -1,7 +1,17 @@
-"""Plot functions """
+"""Plot functions"""
 
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
+
+
+def _normalize_crash_probability(distances):
+    """Normalize distances to [0, 1] crash probability via rolling statistics."""
+    rolled_mean = pd.Series(distances).rolling(20, min_periods=1).mean()
+    rolled_min = pd.Series(distances).rolling(len(distances), min_periods=1).min()
+    rolled_max = pd.Series(distances).rolling(len(distances), min_periods=1).max()
+    denom = rolled_max - rolled_min
+    return (rolled_mean - rolled_min) / denom.where(denom != 0, other=1e-10)
 
 
 def plot_crash_detections(
@@ -11,66 +21,50 @@ def plot_crash_detections(
     distances,
     time_index_derivs,
     price_resampled_derivs,
-    metric_name
+    metric_name,
+    output_dir="./images",
 ):
+    probability_of_crash = _normalize_crash_probability(distances)
 
-    # calculate rolling mean, min, max of homological derivatives
-    rolled_mean_h = pd.Series(distances).rolling(20, min_periods=1).mean()
-    rolled_min_h = (
-        pd.Series(distances)
-        .rolling(len(distances), min_periods=1)
-        .min()
-    )
-    rolled_max_h = (
-        pd.Series(distances)
-        .rolling(len(distances), min_periods=1)
-        .max()
-    )
-
-    # normalise the time series values to lies within [0, 1]
-    probability_of_crash_h = (rolled_mean_h - rolled_min_h) / (
-        rolled_max_h - rolled_min_h
-    )
-
-    # define time intervals to plots
     is_date_in_interval = (time_index_derivs > pd.Timestamp(start_date)) & (
         time_index_derivs < pd.Timestamp(end_date)
     )
-    probability_of_crash_h_region = probability_of_crash_h[is_date_in_interval]
+    probability_region = probability_of_crash[is_date_in_interval]
     time_index_region = time_index_derivs[is_date_in_interval]
-    resampled_close_price_region = price_resampled_derivs.loc[is_date_in_interval]
+    price_region = price_resampled_derivs.loc[is_date_in_interval]
 
     plt.figure(figsize=(15, 5))
 
     plt.subplot(1, 2, 1)
-    plt.plot(time_index_region, probability_of_crash_h_region, color="#1f77b4")
-    plt.axhline(y=threshold, linewidth=2, color='#ff7f0e', linestyle='--', label='Threshold')
+    plt.plot(time_index_region, probability_region, color="#1f77b4")
+    plt.axhline(y=threshold, linewidth=2, color="#ff7f0e", linestyle="--", label="Threshold")
     plt.title(f"Crash Probability Based on {metric_name}")
-    plt.legend(loc="best", prop={"size": 10},)
+    plt.legend(loc="best", prop={"size": 10})
 
     plt.subplot(1, 2, 2)
     plt.plot(
-        resampled_close_price_region[probability_of_crash_h_region.values > threshold],
-        '#ff7f0e', marker='.', linestyle='None', markersize=4
+        price_region[probability_region.values > threshold],
+        "#ff7f0e", marker=".", linestyle="None", markersize=4,
     )
     plt.plot(
-        resampled_close_price_region[probability_of_crash_h_region.values <= threshold],
-        color="#1f77b4", marker='.', linestyle='None', markersize=4
+        price_region[probability_region.values <= threshold],
+        color="#1f77b4", marker=".", linestyle="None", markersize=4,
     )
-
     plt.title("Close Price")
     plt.legend(
         [
-            "Crash probability > {0}%".format(int(threshold * 100)),
-            "Crash probability ≤ {0}%".format(int(threshold * 100)),
+            f"Crash probability > {int(threshold * 100)}%",
+            f"Crash probability \u2264 {int(threshold * 100)}%",
         ],
         loc="best",
         prop={"size": 10},
     )
-    plt.savefig(f'./images/crash_{metric_name}.png')
-    plt.show()
-    
-    
+
+    slug = metric_name.replace(" ", "_").replace("(", "").replace(")", "")
+    plt.savefig(os.path.join(output_dir, f"crash_{slug}.png"), bbox_inches="tight")
+    plt.close()
+
+
 def plot_crash_comparisons(
     start_date,
     end_date,
@@ -79,72 +73,35 @@ def plot_crash_comparisons(
     distances_2,
     time_index_derivs,
     price_resampled_derivs,
+    output_dir="./images",
 ):
+    probability_1 = _normalize_crash_probability(distances_1)
+    probability_2 = _normalize_crash_probability(distances_2)
 
-    # calculate rolling mean, min, max of homological derivatives
-    rolled_mean_1 = pd.Series(distances_1).rolling(20, min_periods=1).mean()
-    rolled_min_1 = (
-        pd.Series(distances_1)
-        .rolling(len(distances_1), min_periods=1)
-        .min()
-    )
-    rolled_max_1 = (
-        pd.Series(distances_1)
-        .rolling(len(distances_1), min_periods=1)
-        .max()
-    )
-
-    # normalise the time series values to lies within [0, 1]
-    probability_of_crash_1 = (rolled_mean_1 - rolled_min_1) / (
-        rolled_max_1 - rolled_min_1
-    )
-    
-    # calculate rolling mean, min, max of homological derivatives
-    rolled_mean_2 = pd.Series(distances_2).rolling(20, min_periods=1).mean()
-    rolled_min_2 = (
-        pd.Series(distances_2)
-        .rolling(len(distances_2), min_periods=1)
-        .min()
-    )
-    rolled_max_2 = (
-        pd.Series(distances_2)
-        .rolling(len(distances_2), min_periods=1)
-        .max()
-    )
-
-    # normalise the time series values to lies within [0, 1]
-    probability_of_crash_2 = (rolled_mean_2 - rolled_min_2) / (
-        rolled_max_2 - rolled_min_2
-    )
-
-    # define time intervals to plots
     is_date_in_interval = (time_index_derivs > pd.Timestamp(start_date)) & (
         time_index_derivs < pd.Timestamp(end_date)
     )
-    probability_of_crash_1_region = probability_of_crash_1[is_date_in_interval]
-    probability_of_crash_2_region = probability_of_crash_2[is_date_in_interval]
-
-    time_index_region = time_index_derivs[is_date_in_interval]
-    resampled_close_price_region = price_resampled_derivs.loc[is_date_in_interval]
+    prob_1_region = probability_1[is_date_in_interval]
+    prob_2_region = probability_2[is_date_in_interval]
+    price_region = price_resampled_derivs.loc[is_date_in_interval]
 
     plt.figure(figsize=(15, 5))
 
     plt.subplot(1, 2, 1)
     plt.plot(
-        resampled_close_price_region[probability_of_crash_1_region.values > threshold],
-        '#ff7f0e', marker='.', linestyle='None', markersize=4
+        price_region[prob_1_region.values > threshold],
+        "#ff7f0e", marker=".", linestyle="None", markersize=4,
     )
     plt.plot(
-        resampled_close_price_region[probability_of_crash_1_region.values <= threshold],
-        "#1f77b4", marker='.', linestyle='None', markersize=4
+        price_region[prob_1_region.values <= threshold],
+        "#1f77b4", marker=".", linestyle="None", markersize=4,
     )
-
     plt.title("Baseline Detector")
-    plt.ylabel('Close Price', fontsize=12)
+    plt.ylabel("Close Price", fontsize=12)
     plt.legend(
         [
-            "Crash probability > {0}%".format(int(threshold * 100)),
-            "Crash probability ≤ {0}%".format(int(threshold * 100)),
+            f"Crash probability > {int(threshold * 100)}%",
+            f"Crash probability \u2264 {int(threshold * 100)}%",
         ],
         loc="best",
         prop={"size": 10},
@@ -152,23 +109,22 @@ def plot_crash_comparisons(
 
     plt.subplot(1, 2, 2)
     plt.plot(
-        resampled_close_price_region[probability_of_crash_2_region.values > threshold],
-        '#ff7f0e', marker='.', linestyle='None', markersize=4
+        price_region[prob_2_region.values > threshold],
+        "#ff7f0e", marker=".", linestyle="None", markersize=4,
     )
     plt.plot(
-        resampled_close_price_region[probability_of_crash_2_region.values <= threshold],
-        "#1f77b4", marker='.', linestyle='None', markersize=4
+        price_region[prob_2_region.values <= threshold],
+        "#1f77b4", marker=".", linestyle="None", markersize=4,
     )
-
-    plt.title('Topological Detector')
+    plt.title("Topological Detector")
     plt.legend(
         [
-            "Crash probability > {0}%".format(int(threshold * 100)),
-            "Crash probability ≤ {0}%".format(int(threshold * 100)),
+            f"Crash probability > {int(threshold * 100)}%",
+            f"Crash probability \u2264 {int(threshold * 100)}%",
         ],
         loc="best",
         prop={"size": 10},
     )
 
-    plt.savefig('./images/crash_comparison.png')
-    plt.show()
+    plt.savefig(os.path.join(output_dir, "crash_comparison.png"), bbox_inches="tight")
+    plt.close()

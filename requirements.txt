@@ -1,7 +1,7 @@
 giotto-tda
-jupyter
 matplotlib
-openml
+numpy
 pandas
-yfinance
+scikit-learn
 seaborn
+yfinance
